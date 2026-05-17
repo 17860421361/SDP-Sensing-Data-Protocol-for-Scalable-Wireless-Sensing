@@ -416,7 +416,12 @@ processed = execute_pipeline(csi, config)
 ```
 Or:
 ```python
-pipeline("./data/elderAL", "./output", "elderAL", config_file='./examples/configs/algorithms_config.yaml')
+pipeline(
+    "./data/elderAL",
+    "./output",
+    "elderAL",
+    algorithm_config_file='./examples/configs/algorithms_config.yaml',
+)
 ```
 
 **Pipeline presets:**

@@ -2,7 +2,8 @@ import torch.nn as nn
 import importlib.util
 
 
-def load_custom_model(model_file_path, num_classes):
+def load_custom_model(model_file_path, num_classes, input_shape=None, model_kwargs=None):
+    model_kwargs = model_kwargs or {}
     try:
         spec = importlib.util.spec_from_file_location("custom_model", model_file_path)
         if spec is None:
@@ -15,7 +16,19 @@ def load_custom_model(model_file_path, num_classes):
         if not issubclass(model_class, nn.Module):
             raise TypeError("custom model is not a subclass of torch.nn.Module")
 
-        model = model_class(num_classes)
+        try:
+            if input_shape is not None:
+                model = model_class(
+                    num_classes=num_classes,
+                    input_shape=input_shape,
+                    **model_kwargs,
+                )
+            else:
+                model = model_class(num_classes=num_classes, **model_kwargs)
+        except TypeError:
+            if model_kwargs:
+                raise
+            model = model_class(num_classes)
 
         return model
     except FileNotFoundError as e:

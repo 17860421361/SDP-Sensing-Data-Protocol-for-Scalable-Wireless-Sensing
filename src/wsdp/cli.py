@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 
 from .core import pipeline
@@ -18,6 +19,14 @@ def _run_pipeline(args: argparse.Namespace) -> None:
         kwargs['batch_size'] = args.batch_size
     if args.config is not None:
         kwargs['config_file'] = args.config
+    if args.model is not None:
+        kwargs['model_name'] = args.model
+    if args.model_kwargs is not None:
+        kwargs['model_kwargs'] = json.loads(args.model_kwargs)
+    if args.algorithm_config is not None:
+        kwargs['algorithm_config_file'] = args.algorithm_config
+    if args.algorithm_preset is not None:
+        kwargs['algorithm_preset'] = args.algorithm_preset
     
     pipeline(
         input_path=args.input_path,
@@ -112,6 +121,22 @@ def main_cli() -> None:
     parser_run.add_argument("output_folder", type=str, help="output path")
     parser_run.add_argument("dataset", type=str, help="dataset name")
     parser_run.add_argument("--model-path", "-m", type=str, help="path of custom model")
+    parser_run.add_argument(
+        "--model", type=str, default=None,
+        help="registered model name, e.g. CSIModel, cnn1dmodel, THAT"
+    )
+    parser_run.add_argument(
+        "--model-kwargs", type=str, default=None,
+        help='JSON object with extra model constructor arguments, e.g. \'{"dropout": 0.3}\''
+    )
+    parser_run.add_argument(
+        "--algorithm-config", type=str, default=None,
+        help="path to YAML/JSON algorithm pipeline config"
+    )
+    parser_run.add_argument(
+        "--algorithm-preset", type=str, default=None,
+        help="algorithm preset name, e.g. high_quality, fast, robust"
+    )
     parser_run.add_argument(
         "--lr", "--learning-rate", dest="learning_rate", type=float, default=None,
         help="learning rate for training (default: from model_params.json)"

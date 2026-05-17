@@ -46,6 +46,25 @@ class TestHelpCommand:
                 main_cli()
 
 
+class TestRunCommand:
+    def test_run_passes_model_and_algorithm_args(self):
+        with patch('sys.argv', [
+            'wsdp', 'run', 'data/xrf55', 'output', 'xrf55',
+            '--model', 'cnn1dmodel',
+            '--model-kwargs', '{"dropout": 0.25}',
+            '--algorithm-preset', 'robust',
+            '--algorithm-config', 'algorithms.yaml',
+        ]), patch('wsdp.cli.pipeline') as pipeline_mock:
+            main_cli()
+
+        pipeline_mock.assert_called_once()
+        kwargs = pipeline_mock.call_args.kwargs
+        assert kwargs['model_name'] == 'cnn1dmodel'
+        assert kwargs['model_kwargs'] == {'dropout': 0.25}
+        assert kwargs['algorithm_preset'] == 'robust'
+        assert kwargs['algorithm_config_file'] == 'algorithms.yaml'
+
+
 class TestNonInteractiveMode:
     def test_download_has_email_arg(self):
         """Verify --email argument is available."""
