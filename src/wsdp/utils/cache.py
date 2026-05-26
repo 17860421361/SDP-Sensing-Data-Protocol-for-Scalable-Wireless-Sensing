@@ -10,11 +10,12 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
-def get_cache_key(input_path, dataset, pad_len):
+def get_cache_key(input_path, dataset, pad_len, preprocess_config=None):
     """Generate a cache key from input parameters and file modification times.
 
     The key is a hex digest derived from the dataset name, padding length,
-    and sorted (filename, mtime) pairs of every file under *input_path*.
+    optional preprocessing configuration, and sorted (filename, mtime)
+    pairs of every file under *input_path*.
     """
     file_info = []
     for root, _dirs, files in os.walk(input_path):
@@ -30,6 +31,9 @@ def get_cache_key(input_path, dataset, pad_len):
     file_info.sort()
     hasher = hashlib.sha256()
     hasher.update(f"dataset={dataset}|pad_len={pad_len}".encode())
+    if preprocess_config is not None:
+        config_json = json.dumps(preprocess_config, sort_keys=True, default=str)
+        hasher.update(f"|preprocess_config={config_json}".encode())
     for rel_name, mtime in file_info:
         hasher.update(f"|{rel_name}:{mtime}".encode())
 

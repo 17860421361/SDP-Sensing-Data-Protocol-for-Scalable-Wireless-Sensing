@@ -15,12 +15,15 @@ from .datasets import CSIDataset
 from .utils import load_params, train_model, resize_csi_to_fixed_length, load_custom_model
 from .utils.cache import get_cache_key, load_cache, save_cache
 from .processors.base_processor import BaseProcessor
-from .models import CSIModel
+from .processors import ConfigurableProcessor
+from .models import create_model
+from .algorithms import apply_preset, load_config as load_algorithm_config
+from .record import SeedRecord, persist_pipeline_record
 from sklearn.metrics import confusion_matrix, classification_report, accuracy_score
 from torch.utils.data import DataLoader
 from sklearn.model_selection import GroupShuffleSplit, train_test_split
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from typing import Optional, Tuple, Callable
+from typing import Any, Dict, Optional, Tuple, Callable
 
 import logging
 
@@ -31,6 +34,7 @@ def _load_and_preprocess(
     input_path: str,
     dataset: str,
     pad_len: int,
+    pipeline_steps: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, list]:
     """Load CSI data, run processing pipeline, and return arrays ready for splitting.
 
@@ -39,7 +43,10 @@ def _load_and_preprocess(
     """
     csi_data_list = readers.load_data(input_path, dataset)
 
-    processor = BaseProcessor()
+    if pipeline_steps is None:
+        processor = BaseProcessor()
+    else:
+        processor = ConfigurableProcessor(pipeline_steps)
     res = processor.process(csi_data_list, dataset=dataset)
 
     unadjusted_data = res[0]
@@ -67,6 +74,25 @@ def _load_and_preprocess(
     zero_indexed_groups = np.array(zero_indexed_groups)
 
     return processed_data, zero_indexed_labels, zero_indexed_groups, unique_labels
+
+
+def _resolve_pipeline_steps(
+    pipeline_steps: Optional[Dict[str, Dict[str, Any]]] = None,
+    algorithm_config_file: Optional[str] = None,
+    algorithm_preset: Optional[str] = None,
+) -> Optional[Dict[str, Dict[str, Any]]]:
+    """Resolve optional algorithm pipeline configuration.
+
+    Priority: explicit pipeline_steps > config file > preset > legacy BaseProcessor.
+    Returning None preserves the historical BaseProcessor behavior.
+    """
+    if pipeline_steps is not None:
+        return pipeline_steps
+    if algorithm_config_file is not None:
+        return load_algorithm_config(algorithm_config_file)
+    if algorithm_preset is not None:
+        return apply_preset(algorithm_preset)
+    return None
 
 
 def _create_data_split(
@@ -157,6 +183,11 @@ def pipeline(
     output_folder: str,
     dataset: str,
     model_path: Optional[str] = None,
+    model_name: str = "CSIModel",
+    model_kwargs: Optional[Dict[str, Any]] = None,
+    pipeline_steps: Optional[Dict[str, Dict[str, Any]]] = None,
+    algorithm_config_file: Optional[str] = None,
+    algorithm_preset: Optional[str] = None,
     # Hyperparameter overrides
     batch_size: Optional[int] = None,
     learning_rate: Optional[float] = None,
@@ -179,6 +210,11 @@ def pipeline(
         output_folder: Path to output directory
         dataset: Dataset name
         model_path: Optional path to custom model file
+        model_name: Registered model name used when model_path is not provided
+        model_kwargs: Extra keyword arguments passed to the registered/custom model
+        pipeline_steps: Explicit algorithm pipeline steps for ConfigurableProcessor
+        algorithm_config_file: YAML/JSON algorithm config file loaded by wsdp.algorithms.load_config
+        algorithm_preset: Algorithm preset name loaded by wsdp.algorithms.apply_preset
         batch_size: Override default batch size
         learning_rate: Override default learning rate
         weight_decay: Override default weight decay
@@ -200,10 +236,22 @@ def pipeline(
     # Resolve num_workers
     effective_num_workers = num_workers if num_workers is not None else min(os.cpu_count() or 1, 8)
 
+    model_kwargs = model_kwargs or {}
+    resolved_pipeline_steps = _resolve_pipeline_steps(
+        pipeline_steps=pipeline_steps,
+        algorithm_config_file=algorithm_config_file,
+        algorithm_preset=algorithm_preset,
+    )
+
     if model_path is not None:
         logger.info(f"Loading model from {model_path}")
     else:
-        logger.info("Loading default model")
+        logger.info(f"Loading registered model: {model_name}")
+
+    if resolved_pipeline_steps is None:
+        logger.info("Using default BaseProcessor preprocessing pipeline")
+    else:
+        logger.info(f"Using configurable preprocessing pipeline: {resolved_pipeline_steps}")
 
     # Load default params
     try:
@@ -237,7 +285,12 @@ def pipeline(
     cached_result = None
     cache_key = None
     if use_cache:
-        cache_key = get_cache_key(ipath, dataset_name, pad_len)
+        cache_key = get_cache_key(
+            ipath,
+            dataset_name,
+            pad_len,
+            preprocess_config=resolved_pipeline_steps,
+        )
         cached_result = load_cache(cache_dir, cache_key)
 
     if cached_result is not None:
@@ -250,7 +303,12 @@ def pipeline(
         if use_cache:
             logger.info("Cache miss: processing data from scratch")
         processed_data, zero_indexed_labels, zero_indexed_groups, unique_labels = \
-            _load_and_preprocess(ipath, dataset_name, pad_len)
+            _load_and_preprocess(
+                ipath,
+                dataset_name,
+                pad_len,
+                pipeline_steps=resolved_pipeline_steps,
+            )
         if use_cache and cache_key is not None:
             save_cache(cache_dir, cache_key, processed_data, zero_indexed_labels,
                        zero_indexed_groups, unique_labels)
@@ -258,6 +316,7 @@ def pipeline(
     logger.info(f"the following {num_seeds} seeds will be used: {random_seeds}")
 
     top1_accuracies = []
+    seed_records = []
 
     # Check if we have enough groups for GroupShuffleSplit
     n_groups = len(set(zero_indexed_groups))
@@ -289,10 +348,21 @@ def pipeline(
         val_loader = DataLoader(val_dataset, batch_size=batch, num_workers=effective_num_workers, shuffle=False)
 
         num_classes = len(unique_labels)
+        input_shape = train_data[0].shape
         if model_path is None:
-            model = CSIModel(num_classes=num_classes)
+            model = create_model(
+                model_name,
+                num_classes=num_classes,
+                input_shape=input_shape,
+                **model_kwargs,
+            )
         else:
-            model = load_custom_model(model_path, num_classes)
+            model = load_custom_model(
+                model_path,
+                num_classes,
+                input_shape=input_shape,
+                model_kwargs=model_kwargs,
+            )
         model = model.to(device)
         criterion = nn.CrossEntropyLoss()
         optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=wd)
@@ -351,6 +421,19 @@ def pipeline(
         plt.savefig(figure_path)
         plt.close()
 
+        # ---- collect per-seed metrics ----
+        if isinstance(training_history, dict) and training_history.get('train_acc'):
+            train_acc = training_history['train_acc'][-1] / 100.0
+        else:
+            train_acc = 0.0
+        val_acc = checkpoint.get('best_val_acc', 0.0) / 100.0
+        seed_records.append(SeedRecord(
+            seed=current_seed,
+            train_acc=train_acc,
+            val_acc=val_acc,
+            test_acc=current_top1_acc,
+        ))
+
     accuracies_np = np.array(top1_accuracies)
     mean_accuracy = np.mean(accuracies_np)
     variance_accuracy = np.var(accuracies_np)
@@ -358,4 +441,26 @@ def pipeline(
     logger.info(f"All {len(random_seeds)} Top-1 acc: {[f'{acc:.4f}' for acc in top1_accuracies]}")
     logger.info(f"Avg Top-1 acc: {mean_accuracy:.4f}")
     logger.info(f"Variance of Top-1 acc: {variance_accuracy:.6f}")
+
+    # ---- persist pipeline record ----
+    reader_name = readers.get_reader_class(dataset_name).__name__
+    if resolved_pipeline_steps is None:
+        proc_type = "BaseProcessor"
+        proc_steps = {"phase_calibration": "default", "wavelet_denoise_csi": "default"}
+    else:
+        proc_type = "ConfigurableProcessor"
+        proc_steps = resolved_pipeline_steps
+    model_str = f"custom:{model_path}" if model_path is not None else model_name
+
+    persist_pipeline_record(
+        output_folder=output_folder,
+        dataset=dataset_name,
+        total_samples=len(processed_data),
+        reader_name=reader_name,
+        processor_type=proc_type,
+        processor_steps=proc_steps,
+        model=model_str,
+        seed_records=seed_records,
+    )
+
     logger.info("All pipeline complete")

@@ -32,6 +32,8 @@ All hyperparameters can be overridden via CLI:
 | Batch Size | `--batch-size` | From model_params.json |
 | Model Name | `--model` | `CSIModel` |
 | Config File | `--config` | None |
+| Algorithm Preset | `--algorithm-preset` | None |
+| Algorithm Config | `--algorithm-config` | None |
 | Num Workers | `--num-workers` | `4` |
 | Use Cache | `--use-cache` | `False` |
 
@@ -76,28 +78,27 @@ normalize:
   method: z-score
 ```
 
-Usage:
+Use the same algorithm config with the training pipeline:
 ```python
-from wsdp.algorithms import load_config, execute_pipeline
-
-config = load_config('examples/configs/algorithms_config.yaml')
-processed = execute_pipeline(csi, config)
-```
-
-To use algorithm configs with the training pipeline, preprocess data first:
-```python
-from wsdp.algorithms import load_config, execute_pipeline
 from wsdp import pipeline
 
-config = load_config('examples/configs/algorithms_config.yaml')
-processed = execute_pipeline(csi, config)
-
-# Then pass preprocessed data to custom training logic
-# or use the standard pipeline on already-cleaned data
 pipeline(
     input_path='./data/elderAL',
     output_folder='./output',
     dataset='elderAL',
+    algorithm_config_file='examples/configs/algorithms_config.yaml',
+)
+```
+
+Or use a preset directly:
+```python
+from wsdp import pipeline
+
+pipeline(
+    input_path='./data/elderAL',
+    output_folder='./output',
+    dataset='elderAL',
+    algorithm_preset='robust',
 )
 ```
 
