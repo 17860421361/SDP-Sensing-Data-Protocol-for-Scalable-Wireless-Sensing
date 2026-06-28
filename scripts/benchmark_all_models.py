@@ -40,7 +40,12 @@ def benchmark_model(model_name, model_class, processed_data, labels, groups,
     for seed in seeds:
         try:
             train_data, val_data, test_data, train_labels, val_labels, test_labels = \
-                _create_data_split(processed_data, labels, groups, 0.3, 0.5, seed, use_simple)
+                _create_data_split(
+                    # Old call before dataset-specific XRF55 repetition split:
+                    # processed_data, labels, groups, 0.3, 0.5, seed, use_simple
+                    processed_data, labels, groups, 0.3, 0.5, seed, use_simple,
+                    dataset=dataset,
+                )
 
             train_data = np.stack(train_data, axis=0)
             val_data = np.stack(val_data, axis=0)

@@ -28,6 +28,7 @@ Usage:
 """
 import json
 import importlib
+import inspect
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Union
 
@@ -373,7 +374,8 @@ def list_presets() -> Dict[str, list]:
     return {name: list(steps.keys()) for name, steps in PRESETS.items()}
 
 
-def execute_pipeline(csi, steps: Dict[str, Dict[str, Any]]) -> 'np.ndarray':
+def execute_pipeline(csi, steps: Dict[str, Dict[str, Any]],
+                     dataset: Optional[str] = None) -> 'np.ndarray':
     """
     Execute a processing pipeline on CSI data.
 
@@ -382,6 +384,8 @@ def execute_pipeline(csi, steps: Dict[str, Dict[str, Any]]) -> 'np.ndarray':
     Args:
         csi: Input CSI array of shape (T, F, A)
         steps: Pipeline steps from apply_preset() or config file
+        dataset: Optional dataset name. Only xrf55 uses dataset-specific
+            fake-complex cleanup here.
 
     Returns:
         Processed CSI array
@@ -410,17 +414,33 @@ def execute_pipeline(csi, steps: Dict[str, Dict[str, Any]]) -> 'np.ndarray':
             params = steps[category].copy()
             method = params.pop('method')
             func = get_algorithm(category, method)
+            call_kwargs = params.copy()
+            if 'method' in inspect.signature(func).parameters:
+                call_kwargs['method'] = method
+            if dataset == "xrf55" and 'dataset' in inspect.signature(func).parameters:
+                call_kwargs['dataset'] = dataset
 
             if category == 'extract_features':
                 # extract_features returns a dict
-                features_result = func(result, **params)
+                # Original call:
+                # features_result = func(result, **params)
+                features_result = func(result, **call_kwargs)
                 result = features_result  # Pass through for chaining
             elif category == 'detect':
                 # detect returns boolean arrays
-                detection_result = func(result, **params)
+                # Original call:
+                # detection_result = func(result, **params)
+                detection_result = func(result, **call_kwargs)
                 result = detection_result
             else:
-                result = func(result, **params)
+                # Original call:
+                # result = func(result, **params)
+                result = func(result, **call_kwargs)
+
+            if dataset == "xrf55" and np.iscomplexobj(result):
+                imag_part = np.imag(result)
+                if imag_part.size == 0 or np.max(np.abs(imag_part)) < 1e-10:
+                    result = np.real(result)
 
     return result
 

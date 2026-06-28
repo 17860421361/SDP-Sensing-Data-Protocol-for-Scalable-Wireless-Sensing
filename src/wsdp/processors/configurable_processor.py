@@ -60,6 +60,21 @@ def _process_single_csi_configurable(csi_data, dataset, pipeline_steps):
     if whole_csi.shape[0] < 2:
         return None, None, None
 
-    cleaned_csi = execute_pipeline(whole_csi, pipeline_steps)
+    effective_pipeline_steps = pipeline_steps
+    normalize_step = pipeline_steps.get("normalize", {})
+    if (
+        dataset == "xrf55"
+        and normalize_step.get("method") in {"z-score", "min-max"}
+    ):
+        effective_pipeline_steps = {
+            key: value for key, value in pipeline_steps.items()
+            if key != "normalize"
+        }
+
+    # Original call:
+    # cleaned_csi = execute_pipeline(whole_csi, pipeline_steps)
+    # Previous local call before XRF55 train-global normalize:
+    # cleaned_csi = execute_pipeline(whole_csi, pipeline_steps, dataset=dataset)
+    cleaned_csi = execute_pipeline(whole_csi, effective_pipeline_steps, dataset=dataset)
 
     return cleaned_csi, label, group

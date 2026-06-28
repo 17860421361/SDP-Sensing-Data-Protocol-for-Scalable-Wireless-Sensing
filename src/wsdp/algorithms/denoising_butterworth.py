@@ -50,7 +50,7 @@ def butterworth_denoise(csi, order=5, cutoff=0.3):
         # (T, F)
         result = np.empty_like(csi)
         for f in range(csi.shape[1]):
-            if T < min_len:
+            if T <= min_len:
                 result[:, f] = csi[:, f]
             elif np.iscomplexobj(csi):
                 result[:, f] = filtfilt(b, a, np.real(csi[:, f])) + \
@@ -62,7 +62,7 @@ def butterworth_denoise(csi, order=5, cutoff=0.3):
         result = np.empty_like(csi)
         for f in range(csi.shape[1]):
             for a_idx in range(csi.shape[2]):
-                if T < min_len:
+                if T <= min_len:
                     result[:, f, a_idx] = csi[:, f, a_idx]
                 elif np.iscomplexobj(csi):
                     result[:, f, a_idx] = filtfilt(b, a, np.real(csi[:, f, a_idx])) + \
