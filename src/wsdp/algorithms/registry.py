@@ -28,7 +28,6 @@ Usage:
 """
 import json
 import importlib
-import inspect
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Union
 
@@ -407,7 +406,7 @@ def _build_call_kwargs(
 
 
 def execute_pipeline(csi, steps: Dict[str, Dict[str, Any]],
-                     dataset: Optional[str] = None) -> 'np.ndarray':
+                     dataset: Optional[str] = None) -> Any:
     """
     Execute a processing pipeline on CSI data.
 
