@@ -4,8 +4,6 @@ import numpy as np
 from torch.utils.data import Dataset
 
 class CSIDataset(Dataset):
-    # 原始签名：
-    # def __init__(self, data_list, labels, use_phase=False):
     def __init__(self, data_list, labels, use_phase=False, preserve_real_sign=False):
         data_array = np.asarray(data_list)
         if use_phase and np.iscomplexobj(data_array):
@@ -25,8 +23,6 @@ class CSIDataset(Dataset):
             else:
                 data_list = data_array
         else:
-            # 原始逻辑：
-            # data_list = np.abs(data_list)
             data_list = np.abs(data_array)
         self.data_list = torch.from_numpy(data_list).float()
         self.labels = torch.from_numpy(labels).long()

@@ -130,9 +130,6 @@ def run_hparam_search(
         # Split data
         train_data, val_data, test_data, train_labels, val_labels, test_labels = (
             _create_data_split(
-                # Old call before dataset-specific XRF55 repetition split:
-                # processed_data, labels, groups,
-                # test_split, val_split, seed, use_simple_split,
                 processed_data, labels, groups,
                 test_split, val_split, seed, use_simple_split,
                 dataset=dataset,

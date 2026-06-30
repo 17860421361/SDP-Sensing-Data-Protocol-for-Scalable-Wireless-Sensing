@@ -95,7 +95,8 @@ def butterworth_bandpass(csi, order=4, low_freq=0.5, high_freq=50.0, fs=1000.0):
         order: Filter order (default: 4)
         low_freq: Lower cutoff frequency in Hz (default: 0.5)
         high_freq: Upper cutoff frequency in Hz (default: 50.0)
-        fs: Sampling rate in Hz (default: 1000.0)
+        fs: Sampling rate in Hz. The default 1000.0 is a fallback; pass
+            the dataset/device sampling rate when it is known.
 
     Returns:
         np.ndarray: Bandpass-filtered CSI, same shape and dtype as input

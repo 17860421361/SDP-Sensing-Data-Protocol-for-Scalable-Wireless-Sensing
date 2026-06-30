@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from tqdm import tqdm
 from . import readers
+from .dataset_policy import is_amplitude_primary_dataset
 from .datasets import CSIDataset
 from .utils import load_params, train_model, resize_csi_to_fixed_length, load_custom_model
 from .utils.cache import get_cache_key, load_cache, save_cache
@@ -112,15 +113,10 @@ def _create_data_split(
         (train_data, val_data, test_data, train_labels, val_labels, test_labels)
     """
     if dataset == "xrf55":
-        # Previous local call before XRF55 train-global normalize:
-        # return _create_xrf55_repetition_split(processed_data, labels, groups)
         return _create_xrf55_repetition_split(
             processed_data, labels, groups, pipeline_steps=pipeline_steps
         )
 
-    # Old/default behavior for all datasets, including the previous XRF55 path:
-    # use_simple_split=True  -> plain random train_test_split
-    # use_simple_split=False -> GroupShuffleSplit using the processor's group
     if use_simple_split:
         train_data, temp_data, train_labels, temp_labels = train_test_split(
             processed_data, labels,
@@ -170,6 +166,10 @@ def _create_xrf55_repetition_split(
     XRF55 filenames are user_action_trial, e.g. 03_20_08.
     The action id remains the label. The trial/repetition id controls the split:
     01-12 -> train, 13-16 -> validation, 17-20 -> test.
+
+    If z-score or min-max normalization is configured, normalization is applied
+    after the repetition masks are built and uses only training repetitions for
+    statistics. This keeps validation/test repetitions out of the fitted scale.
     """
     repetitions = np.asarray(repetitions).astype(int)
 
@@ -371,17 +371,12 @@ def pipeline(
     cached_result = None
     cache_key = None
     if use_cache:
-        # Old cache key used only preprocessing config:
-        # preprocess_config=resolved_pipeline_steps
-        #
         # XRF55 now stores repetition_id as the split group. Add a version marker
         # so old caches with user_id groups are not reused by accident.
         cache_preprocess_config = resolved_pipeline_steps
         if dataset_name == "xrf55":
             cache_preprocess_config = {
                 "pipeline_steps": resolved_pipeline_steps,
-                # Previous marker before XRF55 train-global normalize:
-                # "split_protocol": "xrf55_repetition_12_4_4",
                 "split_protocol": "xrf55_repetition_12_4_4_train_global_normalize",
             }
         elif dataset_name == "widar":
@@ -435,9 +430,6 @@ def pipeline(
 
         train_data, val_data, test_data, train_labels, val_labels, test_labels = \
             _create_data_split(
-                # Old call before dataset-specific XRF55 repetition split:
-                # processed_data, zero_indexed_labels, zero_indexed_groups,
-                # test_split, val_split, current_seed, use_simple_split,
                 processed_data, zero_indexed_labels, zero_indexed_groups,
                 test_split, val_split, current_seed, use_simple_split,
                 dataset=dataset_name,
@@ -450,14 +442,10 @@ def pipeline(
                      f"shape of last sample of train_data: {train_data[-1].shape}")
 
         preserve_real_sign = (
-            dataset_name == "xrf55"
+            is_amplitude_primary_dataset(dataset_name)
             and isinstance(resolved_pipeline_steps, dict)
             and resolved_pipeline_steps.get("normalize", {}).get("method") == "z-score"
         )
-        # Original calls:
-        # train_dataset = CSIDataset(train_data, train_labels)
-        # test_dataset = CSIDataset(test_data, test_labels)
-        # val_dataset = CSIDataset(val_data, val_labels)
         train_dataset = CSIDataset(
             train_data, train_labels, preserve_real_sign=preserve_real_sign
         )

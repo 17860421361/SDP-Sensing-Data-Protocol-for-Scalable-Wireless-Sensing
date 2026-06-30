@@ -22,6 +22,7 @@ class ConfigurableProcessor:
         self.pipeline_steps = pipeline_steps
 
     def process(self, data_list, **kwargs):
+        """Process CSIData objects and return processed arrays, labels, and groups."""
         dataset = kwargs.get('dataset', '')
         all_data, all_labels, all_groups = [], [], []
 
@@ -71,10 +72,6 @@ def _process_single_csi_configurable(csi_data, dataset, pipeline_steps):
             if key != "normalize"
         }
 
-    # Original call:
-    # cleaned_csi = execute_pipeline(whole_csi, pipeline_steps)
-    # Previous local call before XRF55 train-global normalize:
-    # cleaned_csi = execute_pipeline(whole_csi, pipeline_steps, dataset=dataset)
     cleaned_csi = execute_pipeline(whole_csi, effective_pipeline_steps, dataset=dataset)
 
     return cleaned_csi, label, group

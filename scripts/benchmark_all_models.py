@@ -41,8 +41,6 @@ def benchmark_model(model_name, model_class, processed_data, labels, groups,
         try:
             train_data, val_data, test_data, train_labels, val_labels, test_labels = \
                 _create_data_split(
-                    # Old call before dataset-specific XRF55 repetition split:
-                    # processed_data, labels, groups, 0.3, 0.5, seed, use_simple
                     processed_data, labels, groups, 0.3, 0.5, seed, use_simple,
                     dataset=dataset,
                 )
@@ -156,9 +154,9 @@ def main():
             T = sample.shape[0]
             F_dim = sample.shape[1] if len(sample.shape) >= 2 else 1
             A_dim = sample.shape[2] if len(sample.shape) >= 3 else 1
-            tmp = model_class(num_classes=num_classes, input_shape=(T, F_dim, A_dim))
-            n_params = sum(p.numel() for p in tmp.parameters()) / 1e6
-            del tmp
+            model_for_count = model_class(num_classes=num_classes, input_shape=(T, F_dim, A_dim))
+            n_params = sum(p.numel() for p in model_for_count.parameters()) / 1e6
+            del model_for_count
         except:
             pass
 
